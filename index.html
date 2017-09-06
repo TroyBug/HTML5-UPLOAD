@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>HTML5 Upload</title>
+    <link href="//netdna.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <style>
+        body{margin:0}
+        ul,li,ol,p,dl,form{margin:0; padding:0}
+        .fileUploadContainer{
+            border-radius: 5px;
+            border:3px solid #cc66cc;
+            width: 500px;
+            height: 350px;
+            position: relative;
+            margin-bottom: 10px;
+        }
+        .dragover{
+            border:#cc66cc 3px dotted;
+        }
+        .uploadFile{
+            position: absolute;
+            width:100%;
+            height: 100%;
+            text-align: center;
+            font:18px/350px Arial;
+            z-index: -1;
+        }
+        .uploadFile:after{
+            content: 'Drag files here to upload'
+        }
+        .fileUploadContainer.dragover .uploadFile:after{
+            content: 'Drop files to upload'
+        }
+        .fileUploadContainer.dragover p{display: none}
+        .fileUploadContainer p{
+            margin-top:190px;
+            text-align: center;
+            width: 100%;
+        }
+        .fileUploadContainer p input[type="file"] {
+            opacity: 0;
+            position: absolute;
+            left: 36%;
+        }
+        #progress {
+            margin-top:10px;
+        }
+        #progress p{
+            position: relative;
+            width: 240px;
+            height: 30px;
+            line-height: 30px;
+            margin: 2px 0;
+            padding:0 2px;
+            border: 1px solid #626262;
+            border-radius: 5px;
+        }
+        #progress p.success {
+            background: #0c0 none 0 0 no-repeat;
+        }
+        #progress p.failure
+        {
+	        background: #c00 none 0 0 no-repeat;
+        }
+        #progress p b{
+            position: absolute;
+            height: 100%;
+            z-index: -1;
+            top:0;
+            left: 0;
+            background-image:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAAeCAMAAAAxfD/2AAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAAZQTFRFqP/RAAAABKQzPAAAAA5JREFUeNpiYKAVAAgwAABaAAE/qmGIAAAAAElFTkSuQmCC);
+
+        }
+        #progress p span{
+            position: absolute;
+            right: 0; 
+            text-align: right;
+            padding-right: 5px;
+            width:50px;
+            line-height: 30px;
+        }
+        #progress p a{
+            position: absolute;
+            right: -30px;
+            top: 6px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <p>
+        <label for="syncUpload"><input id="syncUpload" name="u" type="radio">同步上传</label>
+        <label for="asyncUpload"><input id="asyncUpload" name="u" checked="checked" type="radio">异步上传</label>
+    </p>
+    <form id="uploadForm" action="upload.php" method="POST" enctype="multipart/form-data">
+        <div id="Container" class="fileUploadContainer">
+            <div class="uploadFile"></div>
+            <p>
+                Or <a href="javascript:void(0)"> choose your files</a>
+                <!-- 限制同步上传的文件大小(300K) -->
+                <input type="hidden" id="MAX_FILE_SIZE" name="MAX_FILE_SIZE" value="500000" />
+                <input type="file" multiple="multiple" name="fileSelect[]" id="upload">
+            </p>
+        </div>
+        <p id="uploadBtn" style="display:none">
+            <button type="submit">Upload Files</button>
+        </p>
+    </form>
+    
+    <!-- 用于显示传输过程 -->
+    <div id="progress"></div>
+
+    <!-- 显示文件信息 -->
+    <p id="msg"></p>
+    
+
+    <script>
+        var container = document.getElementById('Container'),
+            upload = document.getElementById('upload');
+
+        container.addEventListener('dragenter',dragEnter);
+        container.addEventListener('dragover',dragOver);
+        container.addEventListener('dragleave',dragLeave);
+        document.addEventListener('dragend',dragEnd);
+        upload.addEventListener('change',onChange);
+        container.addEventListener('drop',onChange);
+
+        asyncUpload.addEventListener('click',function() {//异步上传
+            uploadBtn.style.display = 'none';
+
+            upload.addEventListener('change',onChange);
+            container.addEventListener('drop',onChange);
+        });
+
+        syncUpload.addEventListener('click',function() {//同步上传
+            uploadBtn.style.display = '';
+
+            upload.removeEventListener('change',onChange);
+            container.removeEventListener('drop',onChange);
+            container.removeEventListener('dragenter',dragEnter);
+            container.removeEventListener('dragover',dragOver);
+            container.removeEventListener('dragleave',dragLeave);
+            document.removeEventListener('dragend',dragEnd);
+        });
+
+        function dragEnter(e) {
+            this.classList.add('dragover');
+            e.dataTransfer.dropEffect = 'copyMove';
+            
+            e.preventDefault();
+        }
+
+        function dragOver(e) {
+            console.log('dragover');
+            e.dataTransfer.dropEffect = 'move';
+
+            e.preventDefault();
+        }
+
+        function drop(e) {
+            console.log('drop');
+            this.classList.remove('dragover');
+
+            e.preventDefault();
+        }
+
+        function dragEnd(e) {
+            console.log('dragend');
+        }
+
+        function dragLeave(e) {
+            console.log('dragleave');
+            this.classList.remove('dragover');
+
+        }
+
+
+
+        function onChange(e) {
+            progress.innerHTML = '';
+            msg.innerHTML = '';
+            container.classList.remove('dragover');
+
+            var files = e.target.files || e.dataTransfer.files;
+            
+
+            for(var i = 0, file; file = files[i]; i++) {
+                parseFile(file);
+                uploadFile(file,i);
+            }
+            
+            e.preventDefault();
+        }
+
+        function parseFile(f) {
+            var fileName = f.name,
+                size = f.size,
+                type = f.type;
+
+            // msg.innerHTML += `<p>
+            //     FileName:${fileName}, Size:${size}, type:${type}
+            // </p>`;
+
+            if(f.type.indexOf('text') === 0) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    
+                };
+                reader.readAsText(f);
+            }
+
+            if(f.type.indexOf('image') === 0) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    //console.log(e.target.result);
+                };
+                reader.readAsDataURL(f);
+            }
+        }
+        
+        function uploadFile(f,idx) {
+            var xhr = new XMLHttpRequest();
+
+            var progressInfo = document.createElement('p');
+            var childBar = progress.getElementsByTagName('p');  //获取所有进度条
+            progressInfo.innerHTML = '<b></b><span></span><a title="中止" class="fa fa-stop-circle"></a>' + f.name;
+            progress.appendChild(progressInfo);
+
+            //console.log(xhr.upload);
+            //XMLHttpRequestUpload
+
+            //暂停
+            childBar[idx].childNodes[2].addEventListener('click',function(e) {
+                this.parentNode.style.display = 'none';
+                xhr.abort();
+            });
+            
+            //进度
+            xhr.upload.addEventListener("progress", function(e) {
+                var pc = parseInt(e.loaded / e.total * 100) || 0;
+    
+                childBar[idx].firstChild.style.width = pc + "%";
+                childBar[idx].childNodes[1].innerHTML = pc + "%";
+            });
+
+            xhr.addEventListener('abort',function(e) {
+                childBar[idx].childNodes[2].style.display = 'block';
+            });
+
+            xhr.upload.addEventListener('error',function(e) {
+                console.log(e);
+            });
+    
+
+            xhr.onreadystatechange = function(e) {
+                if(xhr.readyState === 4) {
+                    childBar[idx].className = xhr.status === 200 ? "success" : "failure";
+                    childBar[idx].childNodes[2].style.display = 'none';
+                }
+            };
+
+            xhr.open('POST','upload.php',true);
+            //xhr.setRequestHeader('Content-Type','text/plain');
+            xhr.setRequestHeader("X_FILENAME",encodeURIComponent(f.name));
+            xhr.send(f);
+        }
+    </script>
+</body>
+</html>
